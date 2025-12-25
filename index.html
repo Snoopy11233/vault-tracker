@@ -22,6 +22,8 @@
       .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
       .hide-scrollbar::-webkit-scrollbar { width: 0; height: 0; }
     }
+
+    button:disabled { opacity: .45; cursor: not-allowed; }
   </style>
 </head>
 
@@ -262,6 +264,31 @@
             </button>
           </div>
 
+          <div class="mt-3 hidden lg:flex items-center justify-between gap-2">
+            <div class="text-xs text-slate-400">
+              Page <span id="pageInfo" class="text-slate-200">1</span>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <label class="text-xs text-slate-400">Per page</label>
+              <select id="pageSize" class="rounded-2xl select-ui px-3 py-2 text-xs ring-soft hover:bg-white/10">
+                <option value="10">10</option>
+                <option value="12" selected>12</option>
+                <option value="15">15</option>
+                <option value="20">20</option>
+              </select>
+
+              <button id="btnPrevPage"
+                class="rounded-2xl bg-white/5 px-3 py-2 text-xs text-slate-200 ring-soft hover:bg-white/10">
+                Prev
+              </button>
+              <button id="btnNextPage"
+                class="rounded-2xl bg-white/5 px-3 py-2 text-xs text-slate-200 ring-soft hover:bg-white/10">
+                Next
+              </button>
+            </div>
+          </div>
+
       </header>
 
       <!-- Stats row -->
@@ -304,6 +331,25 @@
           <div id="cards"
             class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
           </div>
+
+          <!-- Pagination (bottom, desktop) -->
+          <div class="mt-4 hidden lg:flex items-center justify-between gap-2">
+            <div class="text-xs text-slate-400">
+              Page <span id="pageInfoBottom" class="text-slate-200">1</span>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button id="btnPrevPageBottom"
+                class="rounded-2xl bg-white/5 px-3 py-2 text-xs text-slate-200 ring-soft hover:bg-white/10">
+                Prev
+              </button>
+              <button id="btnNextPageBottom"
+                class="rounded-2xl bg-white/5 px-3 py-2 text-xs text-slate-200 ring-soft hover:bg-white/10">
+                Next
+              </button>
+            </div>
+          </div>
+
         </div>
 
         <!-- Details panel -->
@@ -575,6 +621,10 @@
       filterFav: $("filterFav"),
       sortBy: $("sortBy"),
       btnClearFilters: $("btnClearFilters"),
+      pageInfo: $("pageInfo"),
+      pageSize: $("pageSize"),
+      btnPrevPage: $("btnPrevPage"),
+      btnNextPage: $("btnNextPage"),
       modalBackdrop: $("modalBackdrop"),
       itemModal: $("itemModal"),
       modalTitle: $("modalTitle"),
@@ -620,6 +670,10 @@
 
     let items = ensureSeed();
     let selectedId = null;
+
+    // Pagination (desktop only)
+    let currentPage = 1;
+    let perPage = 12; // default
 
     function fmtDate(yyyy_mm_dd) {
       if (!yyyy_mm_dd) return "N/A";
@@ -856,7 +910,33 @@
         ? `${items.length} items`
         : `${filtered.length} / ${items.length}`;
 
-      els.cards.innerHTML = filtered.map(cardHTML).join("");
+      const isDesktopList = window.matchMedia("(min-width: 1024px)").matches; // lg+
+      // paginate only on desktop
+      let pageCount = 1;
+      let pageItems = filtered;
+      if (isDesktopList) {
+        pageCount = Math.max(1, Math.ceil(filtered.length / perPage));
+        currentPage = Math.min(Math.max(1, currentPage), pageCount);
+        const start = (currentPage - 1) * perPage;
+        pageItems = filtered.slice(start, start + perPage);
+      }
+
+      els.cards.innerHTML = pageItems.map(cardHTML).join("");
+
+      // update pagination UI
+      if (els.pageInfo) {
+        if (isDesktopList) els.pageInfo.textContent = `${currentPage} / ${pageCount}`;
+        else els.pageInfo.textContent = "1 / 1";
+      }
+      if (els.btnPrevPage) els.btnPrevPage.disabled = !isDesktopList || currentPage <= 1;
+      if (els.btnNextPage) els.btnNextPage.disabled = !isDesktopList || currentPage >= pageCount;
+
+      const pageInfoBottom = document.getElementById("pageInfoBottom");
+      const btnPrevBottom = document.getElementById("btnPrevPageBottom");
+      const btnNextBottom = document.getElementById("btnNextPageBottom");
+      if (pageInfoBottom) pageInfoBottom.textContent = isDesktopList ? `${currentPage} / ${pageCount}` : "1 / 1";
+      if (btnPrevBottom) btnPrevBottom.disabled = !isDesktopList || currentPage <= 1;
+      if (btnNextBottom) btnNextBottom.disabled = !isDesktopList || currentPage >= pageCount;
 
       // attach handlers
       els.cards.querySelectorAll("[data-id]").forEach(btn => {
@@ -1062,7 +1142,7 @@
       if (!it) return;
       it.favorite = !it.favorite;
       saveItems(items);
-      render();
+      setPage1AndRender();
     }
 
     function addQuick() {
@@ -1148,17 +1228,22 @@
     // =========================
     // Wire up events
     // =========================
-    els.searchInput.addEventListener("input", render);
-    els.filterType.addEventListener("change", render);
-    els.filterStatus.addEventListener("change", render);
-    els.sortBy.addEventListener("change", render);
+    function setPage1AndRender() { currentPage = 1; render(); }
+
+    // filters/search/sort
+    els.searchInput.addEventListener("input", setPage1AndRender);
+    els.filterType.addEventListener("change", setPage1AndRender);
+    els.filterStatus.addEventListener("change", setPage1AndRender);
+    els.sortBy.addEventListener("change", setPage1AndRender);
+
     els.filterFav.addEventListener("click", () => {
       const on = els.filterFav.getAttribute("aria-pressed") === "true";
       els.filterFav.setAttribute("aria-pressed", String(!on));
       els.filterFav.classList.toggle("bg-amber-500/15", !on);
       els.filterFav.classList.toggle("text-amber-200", !on);
-      render();
+      setPage1AndRender();
     });
+
     els.btnClearFilters.addEventListener("click", () => {
       els.searchInput.value = "";
       els.filterType.value = "";
@@ -1166,8 +1251,38 @@
       els.sortBy.value = "addedDesc";
       els.filterFav.setAttribute("aria-pressed", "false");
       els.filterFav.classList.remove("bg-amber-500/15","text-amber-200");
-      render();
+      setPage1AndRender();
     });
+
+    // Pagination controls (desktop)
+    if (els.pageSize) {
+      // init perPage from UI
+      perPage = Number(els.pageSize.value) || perPage;
+      els.pageSize.addEventListener("change", () => {
+        perPage = Number(els.pageSize.value) || perPage;
+        currentPage = 1;
+        render();
+      });
+    }
+
+    const pageNav = (delta) => {
+      currentPage = Math.max(1, currentPage + delta);
+      render();
+    };
+
+    if (els.btnPrevPage) els.btnPrevPage.addEventListener("click", () => pageNav(-1));
+    if (els.btnNextPage) els.btnNextPage.addEventListener("click", () => pageNav(+1));
+
+    // Bottom pagination (desktop)
+    const btnPrevBottom = document.getElementById("btnPrevPageBottom");
+    const btnNextBottom = document.getElementById("btnNextPageBottom");
+    if (btnPrevBottom) btnPrevBottom.addEventListener("click", () => pageNav(-1));
+    if (btnNextBottom) btnNextBottom.addEventListener("click", () => pageNav(+1));
+
+    // Keep pagination state sane on resize (switching breakpoints)
+    window.addEventListener("resize", () => { render(); });
+
+
 
     els.btnAdd.addEventListener("click", addQuick);
     const btnAddM = document.getElementById("btnAddMobile");
